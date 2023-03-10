@@ -1,0 +1,139 @@
+/*
+ * stepper.h
+ *
+ *  Created on: Dec 8, 2022
+ *      Author: artem
+ */
+
+#include "stm32f4xx_hal.h"
+#include "main.h"
+
+
+#ifndef INC_STEPPER_H_
+#define INC_STEPPER_H_
+
+
+typedef struct {
+	enum State
+	{
+		Wait = 0,
+		MoveForward = 1,
+		MoveBack = 2,
+		MoveTo_Forward = 3,
+		MoveTo_Backward = 4,
+	} state;
+
+	enum Direction
+	{
+		null = 0,
+		forward = 1,
+		backward = 2,
+	} direction;
+
+	enum microstep
+	{
+		whole = 1,
+		half = 2,
+		quarter = 4,
+		eighth = 8,
+		sixteenth = 16
+	} ms;
+
+	struct Cycle
+	{
+		int commands[24];
+		uint8_t commandsCount;
+		uint8_t currentCommand;
+		uint8_t is_active;
+	} cycle;
+	uint8_t cur_ms;
+	int curPosition;
+	int64_t curPositionMM;
+	int targetPosition;
+	uint16_t timerPeriod; //  5 999 ---> 49 999
+	uint16_t countTimer;
+	int speed;
+
+	GPIO_TypeDef* enable_port;
+		uint16_t enable_pin;
+	GPIO_TypeDef* direction_port;
+		uint16_t direction_pin;
+	GPIO_TypeDef* step_port;
+		uint16_t step_pin;
+	GPIO_TypeDef* reset_port;
+		uint16_t reset_pin;
+
+	GPIO_TypeDef* btn_fw_port;
+		uint16_t btn_fw_pin;
+		uint8_t btn_fw_oldstate;
+	GPIO_TypeDef* btn_bw_port;
+		uint16_t btn_bw_pin;
+		uint8_t btn_bw_oldstate;
+
+	GPIO_TypeDef* end_fw_port;
+		uint16_t end_fw_pin;
+		uint8_t end_fw_oldstate;
+	GPIO_TypeDef* end_bw_port;
+		uint16_t end_bw_pin;
+		uint8_t end_bw_oldstate;
+
+	GPIO_TypeDef* end_led_bw_port;
+		uint16_t end_led_bw_pin;
+
+	GPIO_TypeDef* end_led_fw_port;
+		uint16_t end_led_fw_pin;
+
+	GPIO_TypeDef* ms1_port;
+		uint16_t ms1_pin;
+	GPIO_TypeDef* ms2_port;
+		uint16_t ms2_pin;
+	GPIO_TypeDef* ms3_port;
+		uint16_t ms3_pin;
+
+	uint8_t block_fw;
+	uint8_t block_bw;
+
+
+//	unsigned long stepTimer = 0;
+} Stepper;
+
+
+void stepper_tick();
+
+void stepper_setPositionZero(Stepper *stepper);
+void stepper_moveForward(Stepper *stepper);
+void stepper_moveBack(Stepper *stepper);
+void stepper_moveTo(Stepper *stepper, int target);
+void stepper_stop(Stepper *stepper);
+void stepper_init(Stepper *stepper,
+		GPIO_TypeDef* enable_port, uint16_t enable_pin,
+		GPIO_TypeDef* direction_port, uint16_t direction_pin,
+		GPIO_TypeDef* step_port, uint16_t step_pin,
+		GPIO_TypeDef* reset_port, uint16_t reset_pin );
+
+void buttons_init(Stepper *stepper,
+		GPIO_TypeDef* btn_fw_port, uint16_t btn_fw_pin,
+		GPIO_TypeDef* btn_bw_port, uint16_t btn_bw_pin   );
+
+void enders_init(Stepper *stepper,
+		GPIO_TypeDef* end_fw_port, uint16_t end_fw_pin,
+		GPIO_TypeDef* end_bw_port, uint16_t end_bw_pin  );
+
+void check_enders(Stepper *stepper);
+void check_buttons(Stepper *stepper);
+
+void end_leds_init(Stepper *stepper,
+		GPIO_TypeDef* end_led_fw_port, uint16_t end_led_fw_pin,
+		GPIO_TypeDef* end_led_bw_port, uint16_t end_led_bw_pin);
+
+void mstep_init(Stepper *stepper,
+		GPIO_TypeDef* ms1_port, uint16_t ms1_pin,
+		GPIO_TypeDef* ms2_port, uint16_t ms2_pin,
+		GPIO_TypeDef* ms3_port, uint16_t ms3_pin);
+
+void stepper_change_ms(Stepper *stepper, uint8_t ms);
+void stepper_boost(Stepper *stepper, TIM_HandleTypeDef *timer);
+void stepper_stop_boosting(Stepper *stepper, TIM_HandleTypeDef *timer);
+void stepper_save_current_position_mkm(Stepper *stepper, int cur_position);
+
+#endif /* SRC_STEPPER_H_ */
