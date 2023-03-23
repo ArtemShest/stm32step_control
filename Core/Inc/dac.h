@@ -42,6 +42,7 @@ void MX_DAC_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
+void set_dac(uint32_t data);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

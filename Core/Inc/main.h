@@ -53,10 +53,14 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+uint16_t EEPROM_readState(SPI_HandleTypeDef *hspi);
+uint8_t EEPROM_read(SPI_HandleTypeDef *hspi, uint16_t addres);
+void EEPROM_write(SPI_HandleTypeDef *hspi, uint16_t addres, uint8_t data);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define STAT_RD_A_Pin GPIO_PIN_13
+#define STAT_RD_A_GPIO_Port GPIOC
 #define EEPROM_CS_Pin GPIO_PIN_14
 #define EEPROM_CS_GPIO_Port GPIOC
 #define BTN_BW_A_Pin GPIO_PIN_0
@@ -89,6 +93,8 @@ void Error_Handler(void);
 #define LS2_B_GPIO_Port GPIOB
 #define LS1_B_Pin GPIO_PIN_10
 #define LS1_B_GPIO_Port GPIOB
+#define STAT_GN_A_Pin GPIO_PIN_12
+#define STAT_GN_A_GPIO_Port GPIOB
 #define BTN_FW_A_Pin GPIO_PIN_13
 #define BTN_FW_A_GPIO_Port GPIOB
 #define STEP_B_Pin GPIO_PIN_14
@@ -115,6 +121,10 @@ void Error_Handler(void);
 #define ETH_INT_GPIO_Port GPIOD
 #define ETH_RST_Pin GPIO_PIN_4
 #define ETH_RST_GPIO_Port GPIOB
+#define STAT_GN_B_Pin GPIO_PIN_5
+#define STAT_GN_B_GPIO_Port GPIOB
+#define STAT_RD_B_Pin GPIO_PIN_6
+#define STAT_RD_B_GPIO_Port GPIOB
 #define BTN_BW_B_Pin GPIO_PIN_7
 #define BTN_BW_B_GPIO_Port GPIOB
 #define LED_BW_B_Pin GPIO_PIN_8
@@ -122,11 +132,21 @@ void Error_Handler(void);
 #define LED_FW_A_Pin GPIO_PIN_9
 #define LED_FW_A_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
-
 #define IP_ADDR {192,168,1,15}
 #define IP_GATE {192,168,1,1}
 #define IP_MASK {255,255,255,0}
 #define LOCAL_PORT 80
+
+#define WREN 0b0110 		// Write enable
+#define WRDI 0b0100 		// Write disable
+#define RDSR 0b0101 		// Read Status register
+#define WRSR 0b0001 		// Write Status register
+#define READ 0b0011			// Read from memory array
+#define WRITE 0b0010		// Write to Memory array
+#define RDID 0b10000011		// Read Identification page
+#define WRID 0b10000010		// Write Identification page
+#define RDLS 0b10000011		// Reads the Identification page lock status
+#define LID 0b10000010		// Locks the Identification page in read-only mode
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

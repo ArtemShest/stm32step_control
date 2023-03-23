@@ -8,6 +8,29 @@
 
 #include "stepper.h"
 
+void light_on(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
+{
+	HAL_GPIO_WritePin(GPIOx, GPIO_Pin, SET);
+}
+
+void light_off(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
+{
+	HAL_GPIO_WritePin(GPIOx, GPIO_Pin, RESET);
+}
+
+void stat_leds_init(Stepper *stepper, GPIO_TypeDef* stat_GN_port, uint16_t stat_GN_pin,
+		GPIO_TypeDef* stat_RD_port, uint16_t stat_RD_pin)
+{
+	stepper->stat_GN_port = stat_GN_port;
+	stepper->stat_GN_pin = stat_GN_pin;
+	stepper->stat_RD_port = stat_RD_port;
+	stepper->stat_RD_pin = stat_RD_pin;
+
+	light_off(stepper->stat_RD_port, stepper->stat_RD_pin);
+	light_on(stepper->stat_GN_port, stepper->stat_GN_pin);
+
+}
+
 void stepper_setPositionZero(Stepper *stepper)
 {
 	stepper->curPosition = 0;
@@ -17,14 +40,14 @@ void stepper_setPositionZero(Stepper *stepper)
 
 void stepper_moveForward(Stepper *stepper)
 {
-	stepper->direction = forward;
-	stepper->state = MoveForward;
+	stepper->currentCommand = MoveForward;
+	stepper->state = Run_Forward;
 }
 
 void stepper_moveBack(Stepper *stepper)
 {
-	stepper->direction = backward;
-	stepper->state = MoveBack;
+	stepper->currentCommand = MoveBack;
+	stepper->state = Run_Backward;
 }
 
 void stepper_moveTo(Stepper *stepper, int target)
@@ -33,37 +56,44 @@ void stepper_moveTo(Stepper *stepper, int target)
 
 	if (stepper->targetPosition > stepper->curPosition)
 	{
-		stepper->state = MoveTo_Forward;
-		stepper->direction = forward;
+		stepper->currentCommand = MoveTo;
+		stepper->state = Run_Forward;
 	}
 	else if (stepper->targetPosition < stepper->curPosition)
 	{
-		stepper->state = MoveTo_Backward;
-		stepper->direction = backward;
+		stepper->currentCommand = MoveTo;
+		stepper->state = Run_Backward;
 	}
-	else stepper->state = Wait;
+	else
+	{
+		stepper->currentCommand = Stop;
+		stepper->state = Wait;
+
+	}
 }
 
 void stepper_stop(Stepper *stepper)
 {
-	stepper->direction = null;
+	stepper->currentCommand = Stop;
 	stepper->state = Wait;
 	stepper->targetPosition = 0;
 }
 
-
-void stepper_cyclic(Stepper *stepper)
+void stepper_checkCyclic(Stepper *stepper)
 {
 	if (stepper->cycle.is_active)
 	{
-		stepper_moveTo(stepper, stepper->cycle.commands[stepper->cycle.currentCommand]);
-		if (stepper->curPosition == stepper->cycle.commands[stepper->cycle.currentCommand])
+		if(stepper->state == Wait)
 		{
-			if(stepper->cycle.currentCommand == stepper->cycle.commandsCount-1)
+			if (stepper->curPosition == stepper->cycle.commands[stepper->cycle.currentCommand])
 			{
-				stepper->cycle.currentCommand = 0;
+				if(stepper->cycle.currentCommand == stepper->cycle.commandsCount-1)
+				{
+					stepper->cycle.currentCommand = 0;
+				}
+				else stepper->cycle.currentCommand++;
 			}
-			else stepper->cycle.currentCommand++;
+			else stepper_moveTo(stepper, stepper->cycle.commands[stepper->cycle.currentCommand]);
 		}
 	}
 }
@@ -86,8 +116,8 @@ void stepper_init(Stepper *stepper,
 	stepper->curPosition = 0;
 	//stepper->stepDelay = 40;
 
-	stepper->block_fw = 0;
-	stepper->block_bw = 0;
+	stepper->forward.block = 0;
+	stepper->backward.block = 0;
 
 }
 
@@ -95,10 +125,10 @@ void buttons_init(Stepper *stepper,
 		GPIO_TypeDef* btn_fw_port, uint16_t btn_fw_pin,
 		GPIO_TypeDef* btn_bw_port, uint16_t btn_bw_pin   )
 {
-	stepper->btn_fw_port = btn_fw_port;
-	stepper->btn_fw_pin = btn_fw_pin;
-	stepper->btn_bw_port = btn_bw_port;
-	stepper->btn_bw_pin = btn_bw_pin;
+	stepper->forward.btn_port = btn_fw_port;
+	stepper->forward.btn_pin = btn_fw_pin;
+	stepper->backward.btn_port = btn_bw_port;
+	stepper->backward.btn_pin = btn_bw_pin;
 	stepper->timerPeriod = 29999;
 }
 
@@ -106,109 +136,114 @@ void enders_init(Stepper *stepper,
 		GPIO_TypeDef* end_fw_port, uint16_t end_fw_pin,
 		GPIO_TypeDef* end_bw_port, uint16_t end_bw_pin  )
 {
-	stepper->end_fw_port = end_fw_port;
-	stepper->end_fw_pin = end_fw_pin;
-	stepper->end_bw_port = end_bw_port;
-	stepper->end_bw_pin = end_bw_pin;
+	stepper->forward.end_port = end_fw_port;
+	stepper->forward.end_pin = end_fw_pin;
+	stepper->backward.end_port = end_bw_port;
+	stepper->backward.end_pin = end_bw_pin;
 
 	stepper->curPosition = 0;
 
 
 	//проверка на блокировки движения при включении
-	if (HAL_GPIO_ReadPin(stepper->end_fw_port, stepper->end_fw_pin))
-		stepper->block_fw = 1;
-	else stepper->block_fw = 0;
-	if (HAL_GPIO_ReadPin(stepper->end_bw_port, stepper->end_bw_pin))
-		stepper->block_bw = 1;
-	else stepper->block_bw = 0;
+	if (HAL_GPIO_ReadPin(stepper->forward.end_port, stepper->forward.end_pin))
+		stepper->forward.block = 1;
+	else stepper->forward.block = 0;
+	if (HAL_GPIO_ReadPin(stepper->backward.end_port, stepper->backward.end_pin))
+		stepper->backward.block = 1;
+	else stepper->backward.block = 0;
 }
 
-void check_buttons(Stepper *stepper)
+uint8_t check_button(Direction *dir)
 {
-	if (HAL_GPIO_ReadPin(stepper->btn_fw_port, stepper->btn_fw_pin) != stepper->btn_fw_oldstate)
+	uint8_t result = 0;
+	if (HAL_GPIO_ReadPin(dir->btn_port, dir->btn_pin) != dir->btn_oldstate)
 	{
-		if((HAL_GPIO_ReadPin(stepper->btn_fw_port, stepper->btn_fw_pin)) == GPIO_PIN_SET)
+		if((HAL_GPIO_ReadPin(dir->btn_port, dir->btn_pin)) == GPIO_PIN_SET)
 		{
-		 //движение вперед степ А
-			if (stepper->block_fw == 0)
-			{
-				if ((stepper->state == MoveForward)
-						|| (stepper->state == MoveBack)
-						|| (stepper->state == MoveTo_Backward))
-					stepper_stop(stepper);
-				else stepper_moveForward(stepper);
-			}
-		}
-		else stepper_stop(stepper);
-
-		stepper->btn_fw_oldstate = HAL_GPIO_ReadPin(stepper->btn_fw_port, stepper->btn_fw_pin);
-	}
-
-
-
-	else if (HAL_GPIO_ReadPin(stepper->btn_bw_port, stepper->btn_bw_pin) != stepper->btn_bw_oldstate)
-	{
-		if((HAL_GPIO_ReadPin(stepper->btn_bw_port, stepper->btn_bw_pin)) == GPIO_PIN_SET)
-		{
-		 //движение вперед степ А
-			if (stepper->block_bw == 0)
-			{
-				if ((stepper->state == MoveForward)
-						|| (stepper->state == MoveBack)
-						|| (stepper->state == MoveTo_Forward))
-					stepper_stop(stepper);
-				else stepper_moveBack(stepper);
-			}
-		}
-		else stepper_stop(stepper);
-
-		stepper->btn_bw_oldstate = HAL_GPIO_ReadPin(stepper->btn_bw_port, stepper->btn_bw_pin);
-	}
-}
-
-void check_enders(Stepper *stepper)
-{
-	if (HAL_GPIO_ReadPin(stepper->end_fw_port, stepper->end_fw_pin) != stepper->end_fw_oldstate)
-	{
-		if (!HAL_GPIO_ReadPin(stepper->end_fw_port, stepper->end_fw_pin))
-		{
-			stepper_stop(stepper);
-			stepper->block_fw = 1;
-			HAL_GPIO_WritePin(stepper->end_led_fw_port, stepper->end_led_fw_pin, GPIO_PIN_SET);
+			// нажатие кнопки
+ 		   result = 1;
 		}
 		else
 		{
-			stepper->block_fw = 0;
-			HAL_GPIO_WritePin(stepper->end_led_fw_port, stepper->end_led_fw_pin, GPIO_PIN_RESET);
+			// отпускание кнопки
+			result = 2;
 		}
 
-		stepper->end_fw_oldstate = HAL_GPIO_ReadPin(stepper->end_fw_port, stepper->end_fw_pin);
+		dir->btn_oldstate = HAL_GPIO_ReadPin(dir->btn_port, dir->btn_pin);
 	}
-	if (HAL_GPIO_ReadPin(stepper->end_bw_port, stepper->end_bw_pin) != stepper->end_bw_oldstate)
+	return result;
+
+}
+
+uint8_t check_ender(Direction *dir)
+{
+	uint8_t result = 0;
+	if (HAL_GPIO_ReadPin(dir->end_port, dir->end_pin) != dir->end_oldstate)
 	{
-		if (!HAL_GPIO_ReadPin(stepper->end_bw_port, stepper->end_bw_pin))
+		if (!HAL_GPIO_ReadPin(dir->end_port, dir->end_pin))
 		{
-			stepper_stop(stepper);
-			stepper->block_bw = 1;
-			HAL_GPIO_WritePin(stepper->end_led_bw_port, stepper->end_led_bw_pin, GPIO_PIN_SET);
+			// пришло нажатие на концевик
+			dir->block = 1;
+			result = 1;
 		}
 		else
 		{
-			stepper->block_bw = 0;
-			HAL_GPIO_WritePin(stepper->end_led_bw_port, stepper->end_led_bw_pin, GPIO_PIN_RESET);
+			// отпускание концевика
+			dir->block = 0;
+			result = 2;
 		}
-		stepper->end_bw_oldstate = HAL_GPIO_ReadPin(stepper->end_bw_port, stepper->end_bw_pin);
+
+		dir->end_oldstate = HAL_GPIO_ReadPin(dir->end_port, dir->end_pin);
 	}
+	return result;
+}
+
+void new_command(Stepper *stepper, Command cmd)
+{
+	switch (cmd)
+	{
+		case Stop:
+			stepper_stop(stepper);
+			break;
+		case MoveForward:
+			stepper_moveForward(stepper);
+			break;
+		case MoveBack:
+			stepper_moveBack(stepper);
+			break;
+	}
+
+}
+
+void stop_cycle(Stepper *stepper)
+{
+	stepper->cycle.is_active = 0;
+	for (uint8_t i = 0; i < stepper->cycle.commandsCount; i++) stepper->cycle.commands[i] = 0;
+	stepper->cycle.commandsCount = 0;
 }
 
 void end_leds_init(Stepper *stepper,
 		GPIO_TypeDef* end_led_fw_port, uint16_t end_led_fw_pin,
 		GPIO_TypeDef* end_led_bw_port, uint16_t end_led_bw_pin)
 {
-	stepper->end_led_fw_port = end_led_fw_port;
-	stepper->end_led_fw_pin = end_led_fw_pin;
-	stepper->end_led_bw_port = end_led_bw_port;
-	stepper->end_led_bw_pin = end_led_bw_pin;
+	stepper->forward.led_port = end_led_fw_port;
+	stepper->forward.led_pin = end_led_fw_pin;
+	stepper->backward.led_port = end_led_bw_port;
+	stepper->backward.led_pin = end_led_bw_pin;
+}
+
+void end_leds_check(Stepper *stepper)
+{
+	if(stepper->forward.block == 1)
+		light_on(stepper->forward.led_port, stepper->forward.led_pin);
+	else
+		light_off(stepper->forward.led_port, stepper->forward.led_pin);
+
+	if(stepper->backward.block == 1)
+		light_on(stepper->backward.led_port, stepper->backward.led_pin);
+	else
+		light_off(stepper->backward.led_port, stepper->backward.led_pin);
+
 }
 
 void mstep_init(Stepper *stepper,
@@ -226,8 +261,9 @@ void mstep_init(Stepper *stepper,
 
 void stepper_change_ms(Stepper *stepper, uint8_t ms)
 {
-
-	stepper->cur_ms = ms;
+	if (ms == 0) return;
+	if (ms == 16) stepper->cur_ms = 8;
+	stepper->cur_ms = 8;
 	switch(ms)
 	{
 		case whole:
@@ -240,17 +276,17 @@ void stepper_change_ms(Stepper *stepper, uint8_t ms)
 			HAL_GPIO_WritePin(stepper->ms2_port, stepper->ms2_pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(stepper->ms3_port, stepper->ms3_pin, GPIO_PIN_RESET);
 			break;
-		case quarter:
+		case quarter: // 1
 			HAL_GPIO_WritePin(stepper->ms1_port, stepper->ms1_pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(stepper->ms2_port, stepper->ms2_pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(stepper->ms2_port, stepper->ms2_pin, GPIO_PIN_SET);  //// не работает ms2
 			HAL_GPIO_WritePin(stepper->ms3_port, stepper->ms3_pin, GPIO_PIN_RESET);
 			break;
-		case eighth:
+		case eighth: //  1/2
 			HAL_GPIO_WritePin(stepper->ms1_port, stepper->ms1_pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(stepper->ms2_port, stepper->ms2_pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(stepper->ms3_port, stepper->ms3_pin, GPIO_PIN_RESET);
 			break;
-		case sixteenth:
+		case sixteenth: // 1/8
 			HAL_GPIO_WritePin(stepper->ms1_port, stepper->ms1_pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(stepper->ms2_port, stepper->ms2_pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(stepper->ms3_port, stepper->ms3_pin, GPIO_PIN_SET);
@@ -304,14 +340,19 @@ void stepper_step(Stepper *stepper, TIM_HandleTypeDef *htim)
 		HAL_GPIO_TogglePin(stepper->step_port, stepper->step_pin);
 		if (HAL_GPIO_ReadPin(stepper->step_port, stepper->step_pin) == SET)
 		{
-			if (stepper->direction == forward) stepper->curPosition++;
-			else if (stepper->direction == backward) stepper->curPosition--;
+			if (stepper->state == MoveForward) stepper->curPosition++;
+			else if (stepper->state == MoveBack) stepper->curPosition--;
 			stepper_save_current_position_mkm(stepper, stepper->curPosition);
 		}
-		if (stepper->state == MoveTo_Forward || stepper->state == MoveTo_Backward)
+		if (stepper->currentCommand == MoveTo)
 		{
-			if (abs(stepper->targetPosition - stepper->curPosition) > 200) stepper_boost(stepper, htim);
-			else if (abs(stepper->targetPosition - stepper->curPosition) < 400) stepper_slowing(stepper, htim);
+			if (abs(stepper->targetPosition - stepper->curPosition) > 200) stepper_boost(stepper, htim); // 200
+			else if (abs(stepper->targetPosition - stepper->curPosition) < 200) // 400
+			{
+				stepper_slowing(stepper, htim);
+//				if (abs(stepper->targetPosition - stepper->curPosition) < 5) stepper_stop_boosting(stepper, htim);
+				if (stepper->targetPosition == stepper->curPosition) stepper_stop_boosting(stepper, htim);
+			}
 		}
 		else stepper_boost(stepper, htim);
 	}
@@ -323,13 +364,13 @@ void stepper_step(Stepper *stepper, TIM_HandleTypeDef *htim)
 
 void stepper_save_current_position_mkm(Stepper *stepper, int cur_position)
 {
-	// 100 шагов на мм в режиме полного шага; 1/200 = мм на один шаг; 1/200/n (n - режим микрошага); 1/200/n * 10 000 000  чтобы не использовать плавающую точку
-	stepper->curPositionMM = (int64_t)((int64_t)cur_position * 50000 / stepper->cur_ms);
+	// 100 (400)  шагов на мм в режиме полного шага; 1/400 = мм на один шаг; 1/400/n (n - режим микрошага); 1/400/n * 10 000 000  чтобы не использовать плавающую точку
+	stepper->curPositionMM = (int64_t)((int64_t)cur_position * 50000 / stepper->cur_ms); // 25000
 }
 
 void stepper_tick(Stepper *stepper)
 {
-	switch(stepper->state)
+	switch(stepper->currentCommand)
 	{
 		case(Wait):
 			HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_SET);
@@ -342,15 +383,19 @@ void stepper_tick(Stepper *stepper)
 			HAL_GPIO_WritePin(stepper->direction_port, stepper->direction_pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_RESET);
 			break;
-		case(MoveTo_Forward):
-			HAL_GPIO_WritePin(stepper->direction_port, stepper->direction_pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_RESET);
-			if (stepper->curPosition >= stepper->targetPosition) stepper_stop(stepper);
-			break;
-		case(MoveTo_Backward):
-			HAL_GPIO_WritePin(stepper->direction_port, stepper->direction_pin, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_RESET);
-			if (stepper->curPosition <= stepper->targetPosition) stepper_stop(stepper);
+		case(MoveTo):
+			if (stepper->state == Run_Forward)
+			{
+				HAL_GPIO_WritePin(stepper->direction_port, stepper->direction_pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_RESET);
+				if (stepper->curPosition >= stepper->targetPosition) stepper_stop(stepper);
+			}
+			if (stepper->state == Run_Backward)
+			{
+				HAL_GPIO_WritePin(stepper->direction_port, stepper->direction_pin, GPIO_PIN_SET);
+				HAL_GPIO_WritePin(stepper->enable_port, stepper->enable_pin, GPIO_PIN_RESET);
+				if (stepper->curPosition <= stepper->targetPosition) stepper_stop(stepper);
+			}
 			break;
 	}
 }

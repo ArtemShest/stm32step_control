@@ -20,17 +20,17 @@ typedef enum
 	Close_Wait = 0x1c,
 	Close = 0x00,
 	Continue = 0xff,
-} State;
+} w5100s_State;
 
 
 typedef struct {
-	State state;
-	uint8_t recieve_msg[30];
+	w5100s_State state;
+	uint8_t recieve_msg[100];
 	uint16_t recieve_msg_size;
 	uint8_t is_new_command;
 } W5100s;
 
-State w5100s_check();
+w5100s_State w5100s_check();
 void w5100s_readMsg();
 void w5100s_sendAns(int coordA, int coordB, int64_t coordAmm, int64_t coordBmm);
 uint16_t w5100s_getSizeMsg();

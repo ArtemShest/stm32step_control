@@ -5,40 +5,54 @@
  *      Author: artem
  */
 
-#include "stm32f4xx_hal.h"
 #include "main.h"
 
 
 #ifndef INC_STEPPER_H_
 #define INC_STEPPER_H_
 
+typedef struct
+{
+	GPIO_TypeDef* btn_port;
+		uint16_t btn_pin;
+		uint8_t btn_oldstate;
+	GPIO_TypeDef* end_port;
+		uint16_t end_pin;
+		uint8_t end_oldstate;
+	GPIO_TypeDef* led_port;
+		uint16_t led_pin;
+
+	uint8_t block;
+} Direction;
+
+typedef enum
+{
+	Stop = 0,
+	MoveForward = 1,
+	MoveBack = 2,
+	MoveTo = 3,
+	MoveCyclic = 4,
+} Command;
+
+typedef enum
+{
+	Wait = 0,
+	Run_Forward = 1,
+	Run_Backward = 2,
+} State;
 
 typedef struct {
-	enum State
-	{
-		Wait = 0,
-		MoveForward = 1,
-		MoveBack = 2,
-		MoveTo_Forward = 3,
-		MoveTo_Backward = 4,
-	} state;
 
-	enum Direction
-	{
-		null = 0,
-		forward = 1,
-		backward = 2,
-	} direction;
-
+	Command currentCommand;
+	State state;
 	enum microstep
 	{
 		whole = 1,
 		half = 2,
 		quarter = 4,
 		eighth = 8,
-		sixteenth = 16
+		sixteenth = 16,
 	} ms;
-
 	struct Cycle
 	{
 		int commands[24];
@@ -46,6 +60,7 @@ typedef struct {
 		uint8_t currentCommand;
 		uint8_t is_active;
 	} cycle;
+
 	uint8_t cur_ms;
 	int curPosition;
 	int64_t curPositionMM;
@@ -63,26 +78,6 @@ typedef struct {
 	GPIO_TypeDef* reset_port;
 		uint16_t reset_pin;
 
-	GPIO_TypeDef* btn_fw_port;
-		uint16_t btn_fw_pin;
-		uint8_t btn_fw_oldstate;
-	GPIO_TypeDef* btn_bw_port;
-		uint16_t btn_bw_pin;
-		uint8_t btn_bw_oldstate;
-
-	GPIO_TypeDef* end_fw_port;
-		uint16_t end_fw_pin;
-		uint8_t end_fw_oldstate;
-	GPIO_TypeDef* end_bw_port;
-		uint16_t end_bw_pin;
-		uint8_t end_bw_oldstate;
-
-	GPIO_TypeDef* end_led_bw_port;
-		uint16_t end_led_bw_pin;
-
-	GPIO_TypeDef* end_led_fw_port;
-		uint16_t end_led_fw_pin;
-
 	GPIO_TypeDef* ms1_port;
 		uint16_t ms1_pin;
 	GPIO_TypeDef* ms2_port;
@@ -90,20 +85,29 @@ typedef struct {
 	GPIO_TypeDef* ms3_port;
 		uint16_t ms3_pin;
 
-	uint8_t block_fw;
-	uint8_t block_bw;
+	GPIO_TypeDef* stat_GN_port;
+		uint16_t stat_GN_pin;
+	GPIO_TypeDef* stat_RD_port;
+		uint16_t stat_RD_pin;
 
-
-//	unsigned long stepTimer = 0;
+	Direction forward;
+	Direction backward;
 } Stepper;
 
 
-void stepper_tick();
-
+void stepper_tick(Stepper *stepper);
+void light_on(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+void light_off(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
+void stat_leds_init(Stepper *stepper,
+		GPIO_TypeDef* stat_GN_port, uint16_t stat_GN_pin,
+		GPIO_TypeDef* stat_RD_port, uint16_t stat_RD_pin);
+uint8_t check_ender(Direction *dir);
 void stepper_setPositionZero(Stepper *stepper);
 void stepper_moveForward(Stepper *stepper);
 void stepper_moveBack(Stepper *stepper);
 void stepper_moveTo(Stepper *stepper, int target);
+void stepper_checkCyclic(Stepper *stepper);
+void stop_cycle(Stepper *stepper);
 void stepper_stop(Stepper *stepper);
 void stepper_init(Stepper *stepper,
 		GPIO_TypeDef* enable_port, uint16_t enable_pin,
@@ -121,10 +125,13 @@ void enders_init(Stepper *stepper,
 
 void check_enders(Stepper *stepper);
 void check_buttons(Stepper *stepper);
+uint8_t check_button(Direction *dir);
 
 void end_leds_init(Stepper *stepper,
 		GPIO_TypeDef* end_led_fw_port, uint16_t end_led_fw_pin,
 		GPIO_TypeDef* end_led_bw_port, uint16_t end_led_bw_pin);
+
+void end_leds_check(Stepper *stepper);
 
 void mstep_init(Stepper *stepper,
 		GPIO_TypeDef* ms1_port, uint16_t ms1_pin,

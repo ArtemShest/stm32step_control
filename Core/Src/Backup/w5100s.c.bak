@@ -23,29 +23,18 @@ extern uint8_t ipgate[4];
 extern uint8_t ipmask[4];
 extern uint16_t local_port;
 
-State w5100s_check()
+w5100s_State w5100s_check()
 {
 	  uint8_t state = w5100s_socketState();
 	  if(w5100s.state != state) //server state change
 	  {
-		  if (state == Listen)
+		  if (state == Listen) { }
+		  else if (state == Connect)
 		  {
-			  //printf ("Socket Listening\r\n");
-		  }
-		  else if (state == Connect) // читаем сообщение
-		  {
-			  //printf ("New connecting\r\n");
-
 			  w5100s_readMsg();
-			  for (uint16_t i = 0; i< w5100s.recieve_msg_size; i++)
-			  {
-				  printf ("%d", w5100s.recieve_msg[i]);
-			  }
-			  printf ("\r\n");
 		  }
 		  else if (state == Close_Wait)
 		  {
-			  //w5100s_readMsg();
 			  w5100s_socketReOpen();
 		  }
 		  else if (state == Close)
@@ -56,7 +45,6 @@ State w5100s_check()
 
 		  w5100s.state = state;
 		  return w5100s.state;
-
 	  }
 	  else return Continue;
 
@@ -64,18 +52,12 @@ State w5100s_check()
 
 void w5100s_readMsg()
 {
-	//printf ("readMsg\r\n");
-	HAL_Delay(1);
 	w5100s.recieve_msg_size = w5100s_getSizeMsg();
 	if(w5100s.recieve_msg_size > 0)
 	{
-
-
 		uint16_t offset;
 		uint16_t offset_masked;
 		uint16_t start_address;
-
-		//printf ("%d\r\n", w5100s.recieve_msg_size);
 
 		offset =  w5100s_readReg(REG_S0_RX_RD0) << 8;
 		offset += w5100s_readReg(REG_S0_RX_RD1);
@@ -86,9 +68,7 @@ void w5100s_readMsg()
 		for (uint16_t i = 0; i< w5100s.recieve_msg_size; i++)
 		{
 			w5100s.recieve_msg[i] = w5100s_readReg(start_address + i);
-			//printf ("%d", w5100s.recieve_msg[i]);
 		}
-		//printf ("\r\n");
 		w5100s.is_new_command = 1;
 
 		offset += w5100s.recieve_msg_size;
@@ -96,30 +76,21 @@ void w5100s_readMsg()
 		w5100s_writeReg(REG_S0_RX_RD1, offset);
 
 		w5100s_writeReg(REG_S0_CR, SOCKET_RECV);
-
-		//printf ("end readMsg\r\n");
 	}
 }
 
 
 void w5100s_sendAns(int coordA, int coordB, int64_t coordAmm, int64_t coordBmm)
 {
-	//w5100s_writeReg(TX_BASE_ADDR, 0x4);
-	//w5100s_writeReg(TX_BASE_ADDR+1, 0x7);
-
 	uint16_t tx_offset  = (w5100s_readReg(REG_S0_TX_RD0) << 8) +  w5100s_readReg(REG_S0_TX_RD1);
 	tx_offset = (tx_offset & S0_TX_MASK);
 	uint16_t tx_start_addr = tx_offset + TX_BASE_ADDR;
 	uint8_t data_length = 24;
 
-	//printf ("%d \r\n", coordAmm);
-	//printf ("%d \r\n", coordBmm);
-
 	uint8_t data[] = {coordA>>24, coordA>>16, coordA>>8, coordA, coordB>>24, coordB>>16, coordB>>8, coordB,
 		coordAmm>>56, coordAmm>>48, coordAmm>>40, coordAmm >> 32, coordAmm>>24, coordAmm>>16, coordAmm>>8, coordAmm,
 		coordBmm>>56, coordBmm>>48, coordBmm>>40, coordBmm >> 32, coordBmm>>24, coordBmm>>16, coordBmm>>8, coordBmm, };
 
-	//printf ("%d, %d, %d, %d, %d, %d, %d, %d", coordAmm>>56, coordAmm>>48, coordAmm>>40, coordAmm >> 32, coordAmm>>24, coordAmm>>16, coordAmm>>8, coordAmm);
 	uint16_t tx_end_addr = (w5100s_readReg(REG_S0_TX_WR0) << 8) +  w5100s_readReg(REG_S0_TX_WR1);
 	tx_end_addr += data_length;
 	w5100s_writeReg(REG_S0_TX_WR0, tx_end_addr >> 8);
@@ -158,7 +129,6 @@ void w5100s_socketReOpen()
 
 uint8_t w5100s_readReg(uint16_t address)
 {
-	//HAL_Delay(1);
 	uint8_t buf[] = {W5100_READ, address >> 8, address};
 	uint8_t *rbyte;
     SS_SELECT();

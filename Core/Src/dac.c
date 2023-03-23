@@ -112,10 +112,10 @@ void HAL_DAC_MspDeInit(DAC_HandleTypeDef* dacHandle)
 }
 
 /* USER CODE BEGIN 1 */
-
 void set_dac(uint32_t data)
 {
 	HAL_DAC_Start(&hdac,DAC_CHANNEL_1);
 	HAL_DAC_SetValue(&hdac,DAC_CHANNEL_1,DAC_ALIGN_12B_R, data); // 1400
 }
+
 /* USER CODE END 1 */

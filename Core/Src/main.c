@@ -25,10 +25,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "controller.h"
 #include "stepper.h"
 #include "w5100s.h"
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,46 +48,22 @@
 
 /* USER CODE BEGIN PV */
 uint16_t adc = 0;
-Stepper stepperA;
-Stepper stepperB;
-W5100s w5100s;
+
+extern Stepper stepperA;
+extern Stepper stepperB;
+extern W5100s w5100s;
+
 
 uint8_t ipaddr[4]=IP_ADDR;
 uint8_t ipgate[4]=IP_GATE;
 uint8_t ipmask[4]=IP_MASK;
 uint16_t local_port = 10;
-
-struct msg
-{
-	uint8_t from[4];
-	uint8_t comm;
-	uint8_t target;  // stepA or stepB [ 0 or 1]
-	uint8_t data[100];
-	uint8_t data_size;
-	uint8_t unitMeasure; // 1 - steps;;;; 2 - mkm
-} cmd;
-
-enum comm
-{
-	stop = 1,
-	run_forward = 2,
-	run_backward = 3,
-	run_cycle = 4,
-	set_position_zero = 5,
-	run_zero = 6,
-	run_to = 7,
-	shift_on = 8,
-	get_cur_pos = 9,
-	change_ip = 10
-} command;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void check_server_state();
-void do_command();
-void parse_message();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -100,9 +75,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         else if(htim->Instance == TIM8)
         	stepper_step(&stepperB, htim);
 }
-
-
-
 /* USER CODE END 0 */
 
 /**
@@ -113,47 +85,7 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 
-	// ------------- init stepper A ----------------
 
-	 stepper_init(&stepperA,
-			 ENABLE_A_GPIO_Port, ENABLE_A_Pin,
-			 DIR_A_GPIO_Port, DIR_A_Pin,
-			 STEP_A_GPIO_Port, STEP_A_Pin,
-			 RESET_A_GPIO_Port, RESET_A_Pin);
-		 buttons_init(&stepperA,
-				 BTN_FW_A_GPIO_Port, BTN_FW_A_Pin,
-				 BTN_BW_A_GPIO_Port, BTN_BW_A_Pin);
-		 enders_init(&stepperA,
-				 LS1_A_GPIO_Port, LS1_A_Pin,
-				 LS2_A_GPIO_Port, LS2_A_Pin);
-		 end_leds_init(&stepperA,
-				 LED_FW_A_GPIO_Port, LED_FW_A_Pin,
-				 LED_BW_A_GPIO_Port, LED_BW_A_Pin);
-		 mstep_init(&stepperA,
-				 MS1_A_GPIO_Port, MS1_A_Pin,
-				 MS2_A_GPIO_Port, MS2_A_Pin,
-				 MS3_A_GPIO_Port, MS3_A_Pin);
-
-
-	// ------------- init stepper B ----------------
-	 stepper_init(&stepperB,
-			 ENABLE_B_GPIO_Port, ENABLE_B_Pin,
-			 DIR_B_GPIO_Port, DIR_B_Pin,
-			 STEP_B_GPIO_Port, STEP_B_Pin,
-			 RESET_B_GPIO_Port, RESET_B_Pin);
-		 buttons_init(&stepperB,
-				 BTN_FW_B_GPIO_Port, BTN_FW_B_Pin,
-				 BTN_BW_B_GPIO_Port, BTN_BW_B_Pin);
-		 enders_init(&stepperB,
-				 LS1_B_GPIO_Port, LS1_B_Pin,
-				 LS2_B_GPIO_Port, LS2_B_Pin);
-		 end_leds_init(&stepperB,
-				 LED_FW_B_GPIO_Port, LED_FW_B_Pin,
-				 LED_BW_B_GPIO_Port, LED_BW_B_Pin);
-		 mstep_init(&stepperB,
-				 MS1_B_GPIO_Port, MS1_B_Pin,
-				 MS2_B_GPIO_Port, MS2_B_Pin,
-				 MS3_B_GPIO_Port, MS3_B_Pin);
 
   /* USER CODE END 1 */
 
@@ -187,69 +119,39 @@ int main(void)
    HAL_TIM_Base_Start_IT(&htim8);
 
    set_dac(1200);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	 stepper_change_ms(&stepperA, sixteenth);
-	 stepper_change_ms(&stepperB, sixteenth);
-
-	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //sleep A
-     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET); //sleep B
 
 
-     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET); //reset A
-     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET); //reset B
 
-     HAL_Delay(1);
-
-     HAL_GPIO_WritePin(stepperA.enable_port, stepperA.enable_pin, GPIO_PIN_SET); //enable A
-     HAL_Delay(1);
-
-     HAL_GPIO_WritePin(stepperB.enable_port, stepperB.enable_pin, GPIO_PIN_SET); //enable B
-     HAL_Delay(1);
-
-     check_enders(&stepperA);
-     check_enders(&stepperB);
-
-  w5100s_init();
-
-  printf ("%d ", EEPROM_readState(&hspi3));
-  printf ("\r\n");
+   steppers_init();
+   w5100s_init();
 
 
-  for(uint8_t i; i < 20; i++)
-  {
 
-	  EEPROM_write(&hspi3, i + 2000, i*2);
-	  HAL_Delay(100);
-	  printf ("%d ", EEPROM_read(&hspi3, i + 2000));
-	  printf ("\r\n");
+   	 printf ("%d ", EEPROM_readState(&hspi3));
+     printf ("\r\n");
 
-  }
 
-  printf ("%d ", EEPROM_readState(&hspi3));
-  printf ("\r\n");
+     for(uint8_t i; i < 20; i++)
+     {
 
+		  EEPROM_write(&hspi3, i + 2000, i*2);
+		  HAL_Delay(100);
+		  printf ("%d ", EEPROM_read(&hspi3, i + 2000));
+		  printf ("\r\n");
+
+     }
+
+     printf ("%d ", EEPROM_readState(&hspi3));
+     printf ("\r\n");
 
 
   while (1)
   {
-	  check_buttons(&stepperA);
-	  check_buttons(&stepperB);
-
-	  check_enders(&stepperA);
-	  check_enders(&stepperB);
-
-	  stepper_tick(&stepperA);
-	  stepper_tick(&stepperB);
-
-	  //HAL_Delay(10);
-
-	  check_server_state();
-	  stepper_cyclic(&stepperA);
-	  stepper_cyclic(&stepperB);
+	 controller();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -305,140 +207,47 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void check_server_state()
+
+void EEPROM_write(SPI_HandleTypeDef *hspi, uint16_t addres, uint8_t data)
 {
-	if (w5100s_check() != Continue)
-	{
-		if (w5100s.is_new_command)
-		{
-			//printf ("new command!!!!\r\n");
-			w5100s.is_new_command = 0;
-			parse_message();
-			do_command(); //and send answer
-		}
-	}
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, RESET);
+	HAL_SPI_Transmit(hspi, WREN, 1, 0xFFFFFFFF);
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, SET);
+
+	uint8_t buf[] = {0x02, addres >> 8, addres, data};
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, RESET);
+	HAL_SPI_Transmit(hspi, &buf, 4, 0xFFFFFFFF);
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, SET);
+
 }
 
-void do_command()
+uint8_t EEPROM_read(SPI_HandleTypeDef *hspi, uint16_t addres)
 {
-	Stepper *stp;
-	if (cmd.target == 0)
-		stp = &stepperA;
-	else if (cmd.target == 1)
-		stp = &stepperB;
 
-	if (cmd.comm != get_cur_pos)
-	{
-		stp->cycle.is_active = 0;
-		for (uint8_t i = 0; i < stp->cycle.commandsCount; i++)
-			stp->cycle.commands[i] = 0;
-		stp->cycle.commandsCount = 0;
-	}
+	uint8_t buf[] = {0x03, addres >> 8, addres};
+	uint8_t *rbyte;
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, RESET);
+	HAL_SPI_Transmit(hspi, &buf, 3, 0xFFFFFFFF);
+	HAL_SPI_Receive(hspi, &rbyte, 1, 1000);
 
-	switch(cmd.comm)
-	{
-	case stop:
-		stepper_stop(stp);
-		break;
-	case run_forward:
-		if (stp->block_fw == 0)
-		{
-			if ((stp->state == MoveForward)
-					|| (stp->state == MoveBack)
-					|| (stp->state == MoveTo_Backward))
-				stepper_stop(stp);
-			else stepper_moveForward(stp);
-		}
-		break;
-	case run_backward:
-		if (stp->block_bw == 0)
-		{
-			if ((stp->state == MoveForward)
-					|| (stp->state == MoveBack)
-					|| (stp->state == MoveTo_Forward))
-				stepper_stop(stp);
-			else stepper_moveBack(stp);
-		}
-		break;
-	case run_cycle:
-		CyclicDataParseFromArr(stp);
-		stp->cycle.currentCommand = 0;
-		stp->cycle.is_active = 1;
-		break;
-	case set_position_zero:
-		stepper_setPositionZero(stp);
-		break;
-	case run_zero:
-		stepper_moveTo(stp, 0);
-		break;
-	case run_to:
-		stepper_moveTo(stp, dataParseFromArr());
-		break;
-	case shift_on:
-		if ((stp->state == MoveTo_Forward) || (stp->state == MoveTo_Backward))
-			stepper_moveTo(stp, dataParseFromArr() + stp->targetPosition);
-		else if((stp->state == MoveForward) || (stp->state == MoveBack))
-			stepper_moveTo(stp, dataParseFromArr() + stp->curPosition);
-		else stepper_moveTo(stp, dataParseFromArr() + stp->curPosition);
-		break;
-	case get_cur_pos:
-		break;
-	}
-
-	w5100s_sendAns(stepperA.curPosition, stepperB.curPosition, stepperA.curPositionMM, stepperB.curPositionMM);
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, SET);
+	return rbyte;
 }
 
-void CyclicDataParseFromArr(Stepper *stp)
+uint16_t EEPROM_readState(SPI_HandleTypeDef *hspi)
 {
-	if (cmd.comm == run_cycle)
-	{
-		stp->cycle.commandsCount = cmd.data[0];
-		for (uint8_t i=0; i< stp->cycle.commandsCount; i++)
-		{
-			for (uint8_t j=1; j<5; j++)
-			{
-				stp->cycle.commands[i] += cmd.data[j+(i*4)] << (8*(4-j));
-			}
-		}
-	}
-}
+	uint8_t buf[2];
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, RESET);
+	HAL_SPI_Transmit(hspi, RDSR, 1, 0xFFFFFFFF);
+	HAL_SPI_Receive(hspi, &buf, 2, 1000);
+	HAL_GPIO_WritePin(EEPROM_CS_GPIO_Port, EEPROM_CS_Pin, SET);
 
-int dataParseFromArr()
-{
-	if ((cmd.comm == run_to) || (cmd.comm == shift_on))
-	{
-		int dataInt = 0;
-		uint8_t unitMeasure = cmd.data[0];
-		for(uint8_t i = 1; i < 5; i++)
-		{
-			dataInt += (cmd.data[i] << (8*(4-i)));
-		}
-		if (unitMeasure == 2) //требуется перевод из мкм в шаги
-		{
-			// dataInt =      5 микрон на 16 шагов
-			int8_t remains = dataInt % 5;
-			dataInt = (dataInt - remains) / 5 * 16;
-			// округлить до числа, которое делится на 5, умножить на 16
-		}
-		return dataInt;
-	}
-	else return 0;
-}
+	  printf ("%d ", buf[0]);
+	  printf ("%d", buf[1]);
+	  printf ("\r\n");
 
-void parse_message()
-{
-	cmd.comm = w5100s.recieve_msg[4]; //get command nomber
 
-	cmd.target = w5100s.recieve_msg[5]; //target stepper
-
-	cmd.data_size = w5100s.recieve_msg_size - 6;
-
-	for(uint8_t i = 0; i < cmd.data_size; i++)
-	{
-		cmd.data[i] =  w5100s.recieve_msg[i+6];
-	    //printf ("%d ", cmd.data[i]);
-	}
-	//printf ("\r\n");
+	return 1;
 }
 
 int __io_putchar(int ch)
@@ -446,7 +255,6 @@ int __io_putchar(int ch)
 	ITM_SendChar(ch);
 	return ch;
 }
-
 /* USER CODE END 4 */
 
 /**
