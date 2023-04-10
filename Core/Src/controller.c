@@ -106,6 +106,9 @@ void steppers_init()
 
 		HAL_GPIO_WritePin(stepperB.enable_port, stepperB.enable_pin, GPIO_PIN_SET); //enable B
 		HAL_Delay(1);
+
+		stepperB.forward.invert_ender = 1;
+		stepperB.backward.invert_ender = 1;
 }
 
 

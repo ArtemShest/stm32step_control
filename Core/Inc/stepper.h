@@ -23,6 +23,7 @@ typedef struct
 		uint16_t led_pin;
 
 	uint8_t block;
+	uint8_t invert_ender;
 } Direction;
 
 typedef enum

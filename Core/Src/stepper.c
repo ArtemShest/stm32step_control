@@ -144,6 +144,7 @@ void enders_init(Stepper *stepper,
 	stepper->curPosition = 0;
 
 
+
 	//проверка на блокировки движения при включении
 	if (HAL_GPIO_ReadPin(stepper->forward.end_port, stepper->forward.end_pin))
 		stepper->forward.block = 1;
@@ -180,19 +181,37 @@ uint8_t check_ender(Direction *dir)
 	uint8_t result = 0;
 	if (HAL_GPIO_ReadPin(dir->end_port, dir->end_pin) != dir->end_oldstate)
 	{
-		if (!HAL_GPIO_ReadPin(dir->end_port, dir->end_pin))
+		if (dir->invert_ender == 0)
 		{
-			// пришло нажатие на концевик
-			dir->block = 1;
-			result = 1;
-		}
-		else
-		{
-			// отпускание концевика
-			dir->block = 0;
-			result = 2;
+			if (!HAL_GPIO_ReadPin(dir->end_port, dir->end_pin))
+			{
+				// пришло нажатие на концевик
+				dir->block = 1;
+				result = 1;
+			}
+			else
+			{
+				// отпускание концевика
+				dir->block = 0;
+				result = 2;
+			}
 		}
 
+		else if (dir->invert_ender == 1)
+		{
+			if (HAL_GPIO_ReadPin(dir->end_port, dir->end_pin))
+			{
+				// пришло нажатие на концевик
+				dir->block = 1;
+				result = 1;
+			}
+			else
+			{
+				// отпускание концевика
+				dir->block = 0;
+				result = 2;
+			}
+		}
 		dir->end_oldstate = HAL_GPIO_ReadPin(dir->end_port, dir->end_pin);
 	}
 	return result;
@@ -351,7 +370,11 @@ void stepper_step(Stepper *stepper, TIM_HandleTypeDef *htim)
 			{
 				stepper_slowing(stepper, htim);
 //				if (abs(stepper->targetPosition - stepper->curPosition) < 5) stepper_stop_boosting(stepper, htim);
-				if (stepper->targetPosition == stepper->curPosition) stepper_stop_boosting(stepper, htim);
+				if (stepper->targetPosition == stepper->curPosition)
+				{
+					stepper_stop_boosting(stepper, htim);
+					stepper_stop(stepper);
+				}
 			}
 		}
 		else stepper_boost(stepper, htim);
@@ -365,7 +388,7 @@ void stepper_step(Stepper *stepper, TIM_HandleTypeDef *htim)
 void stepper_save_current_position_mkm(Stepper *stepper, int cur_position)
 {
 	// 100 (400)  шагов на мм в режиме полного шага; 1/400 = мм на один шаг; 1/400/n (n - режим микрошага); 1/400/n * 10 000 000  чтобы не использовать плавающую точку
-	stepper->curPositionMM = (int64_t)((int64_t)cur_position * 50000 / stepper->cur_ms); // 25000
+	stepper->curPositionMM = (int64_t)((int64_t)cur_position * 25000 / stepper->cur_ms); // 25000
 }
 
 void stepper_tick(Stepper *stepper)
