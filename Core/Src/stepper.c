@@ -119,6 +119,7 @@ void stepper_init(Stepper *stepper,
 	stepper->forward.block = 0;
 	stepper->backward.block = 0;
 
+
 }
 
 void buttons_init(Stepper *stepper,
@@ -143,6 +144,11 @@ void enders_init(Stepper *stepper,
 
 	stepper->curPosition = 0;
 
+	stepper->forward.end_oldstate = 1;
+	stepper->forward.block = 0;
+
+	stepper->backward.end_oldstate = 1;
+	stepper->backward.block = 0;
 
 
 	//проверка на блокировки движения при включении
