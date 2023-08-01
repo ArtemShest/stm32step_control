@@ -35,9 +35,6 @@ void controller()
 
 	end_leds_check(&stepperA);
 	end_leds_check(&stepperB);
-	/*
-	stepper_cyclic(&stepperA);
-	stepper_cyclic(&stepperB); */
 }
 
 
